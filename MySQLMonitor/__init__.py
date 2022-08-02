@@ -29,6 +29,7 @@ connection.config(
     user=admin_name,
     password=admin_password
 )
+is_healthy = True
 logging.info(f'Monitoring MySQL flexible server {server.name}.')
 
 
@@ -45,7 +46,7 @@ def check_connection() -> bool:
             logging.info(
                 f'Establish new connection taken {time.perf_counter() - timestamp} Seconds.')
         except mysql.connector.Error as err:
-            if err.errno == errorcode.CR_CONN_HOST_ERROR:
+            if 2000 <= err.errno <= 2999:
                 # If the failure is TLS error, we will retry immedeiately, but up to three times.
                 if tls_error_retry_count < 3:
                     retry_connection = True
@@ -70,9 +71,17 @@ def main(timer: func.TimerRequest) -> None:
         logging.info('The timer is past due!')
         return
 
+    global is_healthy
     if check_connection():
         logging.info(f'Server {server_name}: Available.')
+        is_healthy = True
     else:
         logging.warning(f'Server {server_name}: Unavailable.')
-        mysql_client.servers.begin_failover(resource_group, server_name)
-        logging.warning(f'Server {server_name}: Failover accepted.')
+        if is_healthy:
+            # Failover only if the server was available before this execution.
+            try:
+                mysql_client.servers.begin_failover(resource_group, server_name)
+                logging.warning(f'Server {server_name}: Failover accepted.')
+            except:
+                logging.warning(f'Server {server_name}: Failover interrupted.')
+        is_healthy = False

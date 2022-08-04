@@ -18,9 +18,15 @@ server_name = os.getenv('DB_SERVER_NAME')
 admin_name = os.getenv('DB_ADMIN_NAME')
 admin_password = os.getenv('DB_ADMIN_PASSWORD')
 
-credential = DefaultAzureCredential()
-mysql_client = MySQLManagementClient(credential, subscription_id)
-server = mysql_client.servers.get(resource_group, server_name)
+# Acquire a credential object using default authentication.
+try:
+    credential = DefaultAzureCredential()
+    mysql_client = MySQLManagementClient(credential, subscription_id)
+    server = mysql_client.servers.get(resource_group, server_name)
+except:
+    logging.error(f'Fail to find {server_name} in subscription {subscription_id} and resource group {resource_group} ' +
+                  'with default credential. Please check your configurations.')
+    raise
 
 # Create a connection with configurations provided.
 connection = MySQLConnection()

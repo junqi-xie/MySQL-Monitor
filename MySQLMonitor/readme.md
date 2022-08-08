@@ -39,7 +39,7 @@ Note: If you are using VS Code, you can also refer to [this tutorial](https://do
 
 ## How it works
 
-The monitor will use the credential you provide to ping the MySQL flexible server. When it fails to connect the server, it'll retry 3 times if it encounters a TLS error. If the server is still not responding, it'll begin a forced failover, in the hope to activate the standby.
+The monitor will use the credential you provide to ping the MySQL flexible server. When it fails to connect the server, it'll retry if it encounters a TLS error for up to `MAX_TLS_ERROR_RETRY` times. If the server is still not responding, it'll begin a forced failover, in the hope to activate the standby.
 
 Note that the monitor will not begin a new failover process before it connects to the server successfully once. Please check your firewall rules, so that the monitor will not mistakenly consider the server as unavailable.
 

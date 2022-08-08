@@ -18,6 +18,8 @@ server_name = os.getenv('DB_SERVER_NAME')
 admin_name = os.getenv('DB_ADMIN_NAME')
 admin_password = os.getenv('DB_ADMIN_PASSWORD')
 
+MAX_TLS_ERROR_RETRY = 3
+
 # Acquire a credential object using default authentication.
 try:
     credential = DefaultAzureCredential()
@@ -36,36 +38,25 @@ connection.config(
     password=admin_password
 )
 is_healthy = True
+tls_error_retry_count = 0
 logging.info(f'Monitoring MySQL flexible server {server.name}.')
 
 
 def check_connection() -> bool:
-    retry_connection = True
-    tls_error_retry_count = 0
-
-    while retry_connection:
-        retry_connection = False
-        try:
-            logging.info('Establishing new connection...')
-            timestamp = time.perf_counter()
-            connection.connect()
-            logging.info(
-                f'Establish new connection taken {time.perf_counter() - timestamp} Seconds.')
-        except mysql.connector.Error as err:
-            if 2000 <= err.errno <= 2999:
-                # If the failure is TLS error, we will retry immedeiately, but up to three times.
-                if tls_error_retry_count < 3:
-                    retry_connection = True
-                    tls_error_retry_count += 1
-                    logging.warning(
-                        f'Immediately retry the TLS connection failure. Count: {tls_error_retry_count}.')
-                else:
-                    return False
-            else:
-                # There's a problem in provided credential or permissions.
-                logging.error(f'ERROR {err.errno} ({err.sqlstate}): {err.msg}')
-                exit()
-    return True
+    try:
+        logging.info('Establishing new connection...')
+        timestamp = time.perf_counter()
+        connection.connect()
+        logging.info(
+            f'Establish new connection taken {time.perf_counter() - timestamp} Seconds.')
+        return True
+    except mysql.connector.Error as err:
+        if 2000 <= err.errno <= 2999:
+            return False
+        else:
+            # There's a problem in provided credential or permissions.
+            logging.error(f'ERROR {err.errno} ({err.sqlstate}): {err.msg}')
+            exit()
 
 
 def main(timer: func.TimerRequest) -> None:
@@ -77,17 +68,25 @@ def main(timer: func.TimerRequest) -> None:
         logging.info('The timer is past due!')
         return
 
-    global is_healthy
+    global is_healthy, tls_error_retry_count
     if check_connection():
         logging.info(f'Server {server_name}: Available.')
         is_healthy = True
+        tls_error_retry_count = 0
     else:
         logging.warning(f'Server {server_name}: Unavailable.')
         if is_healthy:
-            # Failover only if the server was available before this execution.
-            try:
-                mysql_client.servers.begin_failover(resource_group, server_name)
-                logging.warning(f'Server {server_name}: Failover accepted.')
-            except:
-                logging.warning(f'Server {server_name}: Failover interrupted.')
-        is_healthy = False
+            # Check connection status if the server was in healthy state.
+            if tls_error_retry_count < MAX_TLS_ERROR_RETRY:
+                # Retry if the error count is within acceptable range.
+                tls_error_retry_count += 1
+                logging.warning(
+                    f'Retry the TLS connection failure. Count: {tls_error_retry_count}.')
+            else:
+                # Begin failover operation.
+                try:
+                    mysql_client.servers.begin_failover(resource_group, server_name)
+                    logging.warning(f'Server {server_name}: Failover accepted.')
+                except:
+                    logging.warning(f'Server {server_name}: Failover interrupted.')
+                is_healthy = False

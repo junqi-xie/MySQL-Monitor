@@ -1,6 +1,6 @@
 # MySQLMonitor - Azure Function App
 
-This Azure Function App works as a monitor for [Azure Database for MySQL - Flexible Server](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/) with [High availability](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/concepts-high-availability) enabled. It detects networking issues between the database server and the customer networking endpoint, and triggers a forced failover on behalf of the customer. It mitigates the limitations in the automatic failover detection mechanism.
+This Azure Function App works as a monitor for [Azure Database for MySQL - Flexible Server](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/) with [High availability](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/concepts-high-availability) enabled. It detects networking issues between the database server and the customer networking endpoint, and triggers a forced failover on behalf of the customer. It mitigates the limitations in the automatic failover detection mechanism. When a forced failover is triggered, an email alert will be sent using Azure Communication Service if configured.
 
 The monitor is designed to run as an [Azure Function App](https://docs.microsoft.com/en-us/azure/azure-functions/), but you can also run it locally.
 
@@ -16,13 +16,18 @@ Note: If you are using VS Code, you can also refer to [this tutorial](https://do
 3. Deploy the project to Azure.
 4. Configure a [Managed Identity](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/) for this app.
    * You must assign Read and Failover permissions for MySQL Flexible to the identity.
-5. Configure the following App Settings:
+5. (Optional) Create an Email Communication Service in Azure Communication Services.
+   * You must link a domain in the service to send email. You can choose to create an Azure subdomain.
+6. Configure the following App Settings:
    * `AZURE_SUBSCRIPTION_ID`: The subscription ID of the server.
    * `DB_RESOURCE_GROUP`: The resource group of the server.
    * `DB_SERVER_NAME`: The name of the server.
    * `DB_ADMIN_NAME`: The name of the login credential.
    * `DB_ADMIN_PASSWORD`: The password of the login credential.
-6. Start the function app. Now it's ready to monitor your database server.
+   * (Optional) `COMMUNICATION_CONNECTION_STRING`: The connection string in Azure Communication Services.
+   * (Optional) `SENDER_ADDRESS`: The address in the linked domain that will send the email alert.
+   * (Optional) `RECIPIENT_ADDRESS`: The address that will receive the email alert.
+7. Start the function app. Now it's ready to monitor your database server.
 
 ### Deploy locally
 
@@ -39,9 +44,7 @@ Note: If you are using VS Code, you can also refer to [this tutorial](https://do
 
 ## How it works
 
-The monitor will use the credential you provide to ping the MySQL flexible server. When it fails to connect the server, it'll retry if it encounters a TLS error for up to `MAX_TLS_ERROR_RETRY` times. If the server is still not responding, it'll begin a forced failover, in the hope to activate the standby.
-
-Note that the monitor will not begin a new failover process before it connects to the server successfully once. Please check your firewall rules, so that the monitor will not mistakenly consider the server as unavailable.
+The monitor will use the credential you provide to ping the MySQL flexible server. When it fails to connect the server, it'll retry if it encounters a TLS error for up to `MAX_TLS_ERROR_RETRY` times. If the server is still not responding, it'll begin a forced failover, in the hope to activate the standby. If the failover process is accepted, and Azure Communication Service is configured properly, an email alert will be sent to your desired email account. Note that the monitor will not begin a new failover process before it connects to the server successfully once. Please check your firewall rules, so that the monitor will not mistakenly consider the server as unavailable.
 
 You can change the running schedule in `function.json`. The default value for the running schedule is `*/5 * * * * *`, which means to execute the function every 5 seconds. Please refer to [cron expression](https://en.wikipedia.org/wiki/Cron#CRON_expression) for full details if you would like to change the schedule.
 
@@ -50,4 +53,5 @@ You can change the running schedule in `function.json`. The default value for th
 * [Azure Database for MySQL - Flexible Server](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/)
 * [High availability concepts](https://docs.microsoft.com/en-us/azure/mysql/flexible-server/concepts-high-availability)
 * [Azure Functions](https://docs.microsoft.com/en-us/azure/azure-functions/)
+* [Email in Azure Communication Services](https://docs.microsoft.com/en-us/azure/communication-services/concepts/email/email-overview)
 * [Cron expression](https://en.wikipedia.org/wiki/Cron#CRON_expression) for Timer Triggers in Azure Functions.
